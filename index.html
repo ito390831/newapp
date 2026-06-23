@@ -160,6 +160,7 @@ const BREAKS = [
   {start: 10*60+0, end: 10*60+5},   // 午前休憩 10:00-10:05
   {start: 12*60+0, end: 12*60+45},  // 昼休憩   12:00-12:45
   {start: 15*60+0, end: 15*60+10},  // 午後休憩 15:00-15:10
+  {start: 16*60+45, end: 17*60+0},  // 残業前休憩 16:45-17:00（残業は17:00から計算）
 ];
 function netMinutes(inM, outM){
   if(inM==null || outM==null || outM<inM) return null;
