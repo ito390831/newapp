@@ -1,0 +1,428 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>勤怠</title>
+<link rel="manifest" href="manifest.json">
+<meta name="theme-color" content="#14151a">
+<link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="勤怠">
+<style>
+  :root{
+    --bg:#14151a; --surface:#1e2028; --surface2:#26283388;
+    --text:#e8e8ec; --muted:#6b6f7d; --line:#2c2e38;
+    --in:#3ddc97; --out:#ff8a5c;
+  }
+  *{box-sizing:border-box; margin:0; padding:0;}
+  body{
+    background:var(--bg); color:var(--text);
+    font-family:-apple-system,"Segoe UI",sans-serif;
+    padding:16px; padding-bottom:48px;
+    min-height:100vh;
+  }
+  .clock{
+    font-family:"SF Mono","Menlo",monospace;
+    font-size:42px; letter-spacing:2px;
+    text-align:center; margin:8px 0 4px;
+    font-weight:600;
+  }
+  .date{ text-align:center; color:var(--muted); font-size:13px; margin-bottom:20px;}
+  .status{
+    text-align:center; font-size:14px; color:var(--muted); margin-bottom:14px;
+  }
+  .status b{ color:var(--text); }
+  .punchBtn{
+    display:block; width:100%; max-width:360px; margin:0 auto 28px;
+    padding:22px; border:none; border-radius:18px;
+    font-size:19px; font-weight:700; letter-spacing:1px;
+    color:#0c0d10; cursor:pointer; transition:opacity .15s;
+  }
+  .punchBtn.in{ background:var(--in); }
+  .punchBtn.out{ background:var(--out); }
+  .punchBtn.done{ background:var(--surface); color:var(--muted); }
+  .punchBtn:active{ opacity:.7; }
+  .schedBtn{
+    display:block; width:100%; max-width:360px; margin:-16px auto 28px;
+    background:none; border:none; color:var(--muted); font-size:13px;
+    text-decoration:underline; cursor:pointer; padding:6px;
+  }
+  .schedBtn:active{ opacity:.6; }
+
+  .monthNav{
+    display:flex; align-items:center; justify-content:space-between;
+    margin:24px 0 10px; padding:0 4px;
+  }
+  .monthNav button{
+    background:none; border:none; color:var(--text); font-size:20px;
+    padding:6px 14px; cursor:pointer;
+  }
+  .monthNav .label{ font-size:15px; font-weight:600; }
+  .totalCard{
+    background:var(--surface); border-radius:14px; padding:16px;
+    text-align:center; margin-bottom:14px;
+  }
+  .totalCard .num{ font-family:monospace; font-size:28px; font-weight:700; }
+  .totalCard .cap{ font-size:12px; color:var(--muted); margin-top:2px; }
+  .totalCard .num2{ font-family:monospace; font-size:18px; font-weight:700; margin-top:12px; }
+
+  .dayRow{
+    background:var(--surface); border-radius:12px;
+    padding:12px 14px; margin-bottom:8px;
+    display:flex; align-items:center; justify-content:space-between;
+    gap:10px;
+  }
+  .dayRow .d{ font-size:13px; color:var(--muted); width:64px; flex-shrink:0; }
+  .dayRow .times{ display:flex; gap:6px; flex:1; }
+  .dayRow input[type=time]{
+    background:var(--bg); border:1px solid var(--line); color:var(--text);
+    border-radius:8px; padding:6px 8px; font-size:13px; width:50%;
+    font-family:monospace;
+  }
+  .dayRow .dur{
+    display:flex; flex-direction:column; align-items:flex-end;
+    width:64px; flex-shrink:0; gap:1px;
+  }
+  .dayRow .dur .net{ font-family:monospace; font-size:13px; color:var(--text); }
+  .dayRow .dur .diff{ font-family:monospace; font-size:11px; }
+  .dayRow .dur .diff.pos{ color:var(--in); }
+  .dayRow .dur .diff.neg{ color:var(--out); }
+  .dayRow .dur .diff.zero{ color:var(--muted); }
+  .empty{ text-align:center; color:var(--muted); font-size:13px; padding:30px 0; }
+
+  .addBtn{
+    display:block; width:100%; background:none; border:1px dashed var(--line);
+    color:var(--muted); border-radius:12px; padding:10px; font-size:13px;
+    margin-bottom:10px; cursor:pointer;
+  }
+  .addBtn:active{ opacity:.6; }
+  .addRow{
+    background:var(--surface2); border:1px solid var(--line); border-radius:12px;
+    padding:12px 14px; margin-bottom:10px;
+    display:flex; align-items:center; gap:8px; flex-wrap:wrap;
+  }
+  .addRow input[type=date]{
+    background:var(--bg); border:1px solid var(--line); color:var(--text);
+    border-radius:8px; padding:6px 8px; font-size:13px; font-family:monospace;
+    width:118px;
+  }
+  .addRow input[type=time]{
+    background:var(--bg); border:1px solid var(--line); color:var(--text);
+    border-radius:8px; padding:6px 8px; font-size:13px; font-family:monospace;
+    width:84px;
+  }
+  .addRow .cancel{
+    background:none; border:none; color:var(--muted); font-size:18px; cursor:pointer;
+    margin-left:auto;
+  }
+</style>
+</head>
+<body>
+
+  <div class="clock" id="clock">--:--:--</div>
+  <div class="date" id="todayLabel">----</div>
+  <div class="status" id="statusLine">読込中...</div>
+  <button class="punchBtn" id="punchBtn">--</button>
+  <button class="schedBtn" id="schedBtn">定時で記録（8:00/16:45）</button>
+
+  <div class="monthNav">
+    <button id="prevM">‹</button>
+    <div class="label" id="monthLabel">----年--月</div>
+    <button id="nextM">›</button>
+  </div>
+  <div class="totalCard">
+    <div class="num" id="monthTotal">0:00</div>
+    <div class="cap">今月の実働時間（休憩除外）</div>
+    <div class="num2" id="monthDiff">0:00</div>
+    <div class="cap">定時(7:45)との差・残業/不足合計</div>
+  </div>
+  <button class="addBtn" id="addDayBtn">＋ 記録追加（打刻忘れの日）</button>
+  <div id="dayList"></div>
+
+<script>
+const KEY = 'kintai_records_v1';
+function loadRecords(){
+  try{ return JSON.parse(localStorage.getItem(KEY)) || {}; }
+  catch(e){ return {}; }
+}
+function saveRecords(r){ localStorage.setItem(KEY, JSON.stringify(r)); }
+
+function pad(n){ return String(n).padStart(2,'0'); }
+function dateKey(d){ return `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}`; }
+function timeStr(d){ return `${pad(d.getHours())}:${pad(d.getMinutes())}`; }
+
+// ---- 定時・休憩設定 ----
+const SCHED_IN = '08:00';
+const SCHED_OUT = '16:45';
+const BREAKS = [
+  {start: 10*60+0, end: 10*60+5},   // 午前休憩 10:00-10:05
+  {start: 12*60+0, end: 12*60+45},  // 昼休憩   12:00-12:45
+  {start: 15*60+0, end: 15*60+10},  // 午後休憩 15:00-15:10
+];
+function netMinutes(inM, outM){
+  if(inM==null || outM==null || outM<inM) return null;
+  let net = outM - inM;
+  for(const b of BREAKS){
+    const os = Math.max(inM, b.start);
+    const oe = Math.min(outM, b.end);
+    if(oe > os) net -= (oe - os);
+  }
+  return net;
+}
+function hm(t){ const [h,m]=t.split(':').map(Number); return h*60+m; }
+const SCHED_NET_MIN = netMinutes(hm(SCHED_IN), hm(SCHED_OUT)); // 465 = 7:45
+function fmtDiff(diff){
+  const sign = diff>0 ? '+' : diff<0 ? '-' : '';
+  return sign + fmtMin(Math.abs(diff));
+}
+
+let records = loadRecords();
+let viewYear, viewMonth; // viewMonth: 0-11
+let showAddForm = false;
+const now0 = new Date();
+viewYear = now0.getFullYear();
+viewMonth = now0.getMonth();
+
+// ---- clock ----
+function tickClock(){
+  const n = new Date();
+  document.getElementById('clock').textContent =
+    `${pad(n.getHours())}:${pad(n.getMinutes())}:${pad(n.getSeconds())}`;
+}
+setInterval(tickClock, 1000);
+tickClock();
+
+// ---- punch button ----
+function refreshPunchUI(){
+  const today = new Date();
+  const key = dateKey(today);
+  document.getElementById('todayLabel').textContent =
+    `${today.getFullYear()}年${today.getMonth()+1}月${today.getDate()}日（${'日月火水木金土'[today.getDay()]}）`;
+
+  const rec = records[key];
+  const btn = document.getElementById('punchBtn');
+  const status = document.getElementById('statusLine');
+
+  if(!rec || !rec.in){
+    btn.textContent = '出勤';
+    btn.className = 'punchBtn in';
+    status.innerHTML = '未出勤';
+  } else if(rec.in && !rec.out){
+    btn.textContent = '退勤';
+    btn.className = 'punchBtn out';
+    status.innerHTML = `出勤中 <b>${rec.in}〜</b>`;
+  } else {
+    btn.textContent = '本日完了（タップで退勤時刻修正）';
+    btn.className = 'punchBtn done';
+    status.innerHTML = `本日 <b>${rec.in}〜${rec.out}</b> 退勤済`;
+  }
+}
+
+document.getElementById('punchBtn').addEventListener('click', ()=>{
+  const today = new Date();
+  const key = dateKey(today);
+  const rec = records[key] || {};
+  if(!rec.in){
+    rec.in = timeStr(today);
+  } else if(!rec.out){
+    rec.out = timeStr(today);
+  } else {
+    rec.out = timeStr(today); // 完了済→再タップで退勤時刻を今に更新
+  }
+  records[key] = rec;
+  saveRecords(records);
+  refreshPunchUI();
+  renderMonth();
+});
+
+document.getElementById('schedBtn').addEventListener('click', ()=>{
+  const today = new Date();
+  const key = dateKey(today);
+  const rec = records[key] || {};
+  if(!rec.in){
+    rec.in = SCHED_IN;
+  } else if(!rec.out){
+    rec.out = SCHED_OUT;
+  } else {
+    rec.out = SCHED_OUT; // 完了済→再タップで退勤時刻を定時に更新
+  }
+  records[key] = rec;
+  saveRecords(records);
+  refreshPunchUI();
+  renderMonth();
+});
+
+// ---- month view ----
+function minutesOf(t){
+  if(!t) return null;
+  const [h,m] = t.split(':').map(Number);
+  return h*60+m;
+}
+function fmtMin(total){
+  const h = Math.floor(total/60), m = total%60;
+  return `${h}:${pad(m)}`;
+}
+
+function buildAddFormRow(){
+  const row = document.createElement('div');
+  row.className = 'addRow';
+
+  const dateInput = document.createElement('input');
+  dateInput.type = 'date';
+  const monthStart = new Date(viewYear, viewMonth, 1);
+  const monthEnd = new Date(viewYear, viewMonth, new Date(viewYear, viewMonth+1, 0).getDate());
+  dateInput.min = dateKey(monthStart);
+  dateInput.max = dateKey(monthEnd);
+  const todayKey = dateKey(new Date());
+  dateInput.value = (todayKey >= dateInput.min && todayKey <= dateInput.max) ? todayKey : dateInput.min;
+
+  const inInput = document.createElement('input');
+  inInput.type = 'time';
+  const outInput = document.createElement('input');
+  outInput.type = 'time';
+
+  function trySave(){
+    if(!inInput.value && !outInput.value) return;
+    const key = dateInput.value;
+    const rec = records[key] || {};
+    if(inInput.value) rec.in = inInput.value;
+    if(outInput.value) rec.out = outInput.value;
+    records[key] = rec;
+    saveRecords(records);
+    showAddForm = false;
+    refreshPunchUI();
+    renderMonth();
+  }
+  [inInput,outInput].forEach(el=> el.addEventListener('change', trySave));
+
+  const cancelBtn = document.createElement('button');
+  cancelBtn.className = 'cancel';
+  cancelBtn.textContent = '✕';
+  cancelBtn.addEventListener('click', ()=>{
+    showAddForm = false;
+    renderMonth();
+  });
+
+  row.appendChild(dateInput);
+  row.appendChild(inInput);
+  row.appendChild(outInput);
+  row.appendChild(cancelBtn);
+  return row;
+}
+
+function renderMonth(){
+  document.getElementById('monthLabel').textContent = `${viewYear}年${viewMonth+1}月`;
+  const list = document.getElementById('dayList');
+  list.innerHTML = '';
+
+  if(showAddForm){
+    list.appendChild(buildAddFormRow());
+  }
+
+  const daysInMonth = new Date(viewYear, viewMonth+1, 0).getDate();
+  let totalMinutes = 0;
+  let totalDiff = 0;
+  let any = false;
+
+  for(let d=daysInMonth; d>=1; d--){
+    const dateObj = new Date(viewYear, viewMonth, d);
+    const key = dateKey(dateObj);
+    const rec = records[key];
+    if(!rec) continue;
+    any = true;
+
+    const row = document.createElement('div');
+    row.className = 'dayRow';
+
+    const dLabel = document.createElement('div');
+    dLabel.className = 'd';
+    dLabel.textContent = `${d}日(${'日月火水木金土'[dateObj.getDay()]})`;
+
+    const times = document.createElement('div');
+    times.className = 'times';
+    const inInput = document.createElement('input');
+    inInput.type = 'time'; inInput.value = rec.in || '';
+    const outInput = document.createElement('input');
+    outInput.type = 'time'; outInput.value = rec.out || '';
+
+    const durEl = document.createElement('div');
+    durEl.className = 'dur';
+
+    function recalcRow(){
+      const im = minutesOf(inInput.value);
+      const om = minutesOf(outInput.value);
+      const net = netMinutes(im, om);
+      if(net!=null){
+        const diff = net - SCHED_NET_MIN;
+        const cls = diff>0?'pos':diff<0?'neg':'zero';
+        durEl.innerHTML = `<div class="net">${fmtMin(net)}</div><div class="diff ${cls}">${fmtDiff(diff)}</div>`;
+      } else {
+        durEl.innerHTML = `<div class="net">-</div>`;
+      }
+    }
+    [inInput,outInput].forEach(inp=>{
+      inp.addEventListener('change', ()=>{
+        rec.in = inInput.value || undefined;
+        rec.out = outInput.value || undefined;
+        records[key] = rec;
+        saveRecords(records);
+        recalcRow();
+        renderMonth(); // 合計再計算
+        refreshPunchUI();
+      });
+    });
+    recalcRow();
+
+    times.appendChild(inInput);
+    times.appendChild(outInput);
+    row.appendChild(dLabel);
+    row.appendChild(times);
+    row.appendChild(durEl);
+    list.appendChild(row);
+
+    const im = minutesOf(rec.in), om = minutesOf(rec.out);
+    const net = netMinutes(im, om);
+    if(net!=null){
+      totalMinutes += net;
+      totalDiff += (net - SCHED_NET_MIN);
+    }
+  }
+
+  document.getElementById('monthTotal').textContent = fmtMin(totalMinutes);
+  const diffEl = document.getElementById('monthDiff');
+  diffEl.textContent = fmtDiff(totalDiff);
+  diffEl.style.color = totalDiff>0 ? 'var(--in)' : totalDiff<0 ? 'var(--out)' : 'var(--muted)';
+  if(!any){
+    const e = document.createElement('div');
+    e.className = 'empty';
+    e.textContent = 'この月の記録なし';
+    list.appendChild(e);
+  }
+}
+
+document.getElementById('addDayBtn').addEventListener('click', ()=>{
+  showAddForm = true;
+  renderMonth();
+});
+document.getElementById('prevM').addEventListener('click', ()=>{
+  viewMonth--; if(viewMonth<0){ viewMonth=11; viewYear--; }
+  showAddForm = false;
+  renderMonth();
+});
+document.getElementById('nextM').addEventListener('click', ()=>{
+  viewMonth++; if(viewMonth>11){ viewMonth=0; viewYear++; }
+  showAddForm = false;
+  renderMonth();
+});
+
+refreshPunchUI();
+renderMonth();
+
+if('serviceWorker' in navigator){
+  navigator.serviceWorker.register('sw.js').catch(()=>{});
+}
+</script>
+</body>
+</html>
