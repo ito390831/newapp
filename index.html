@@ -50,6 +50,24 @@
     text-decoration:underline; cursor:pointer; padding:6px;
   }
   .schedBtn:active{ opacity:.6; }
+  .dayTypeWrap{
+    display:none; max-width:360px; margin:-16px auto 28px;
+    gap:10px; display:none; flex-direction:row;
+  }
+  .dayTypeWrap.show{ display:flex; }
+  .dayTypeBtn{
+    flex:1; padding:14px; border:none; border-radius:14px;
+    font-size:15px; font-weight:700; cursor:pointer;
+    color:#0c0d10;
+  }
+  .dayTypeBtn.training{ background:#a78bfa; }
+  .dayTypeBtn.work{ background:#60a5fa; }
+  .dayTypeBtn:active{ opacity:.7; }
+  .badge{
+    font-size:11px; padding:2px 6px; border-radius:6px; font-weight:700;
+  }
+  .badge.training{ background:#a78bfa22; color:#a78bfa; }
+  .badge.work{ background:#60a5fa22; color:#60a5fa; }
 
   .monthNav{
     display:flex; align-items:center; justify-content:space-between;
@@ -126,6 +144,10 @@
   <div class="status" id="statusLine">読込中...</div>
   <button class="punchBtn" id="punchBtn">--</button>
   <button class="schedBtn" id="schedBtn">定時で記録（8:00/16:45）</button>
+  <div class="dayTypeWrap" id="dayTypeWrap">
+    <button class="dayTypeBtn training" id="trainBtn">研修で出勤</button>
+    <button class="dayTypeBtn work" id="workBtn">作業で出勤</button>
+  </div>
 
   <div class="monthNav">
     <button id="prevM">‹</button>
@@ -162,10 +184,25 @@ const BREAKS = [
   {start: 15*60+0, end: 15*60+10},  // 午後休憩 15:00-15:10
   {start: 16*60+45, end: 17*60+0},  // 残業前休憩 16:45-17:00（残業は17:00から計算）
 ];
-function netMinutes(inM, outM){
+const BREAKS_TRAINING = [
+  {start: 12*60+0, end: 13*60+0},   // 研修休憩 12:00-13:00
+];
+
+function isHoliday(key){
+  const d = new Date(key + 'T00:00:00');
+  const dow = d.getDay();
+  return dow === 0 || dow === 6;
+}
+function getBreaks(key, dayType){
+  if(!isHoliday(key)) return BREAKS;
+  if(dayType === 'training') return BREAKS_TRAINING;
+  return BREAKS; // 作業：平日と同じ
+}
+function netMinutes(inM, outM, breaks){
   if(inM==null || outM==null || outM<inM) return null;
+  const bk = breaks || BREAKS;
   let net = outM - inM;
-  for(const b of BREAKS){
+  for(const b of bk){
     const os = Math.max(inM, b.start);
     const oe = Math.min(outM, b.end);
     if(oe > os) net -= (oe - os);
@@ -173,7 +210,7 @@ function netMinutes(inM, outM){
   return net;
 }
 function hm(t){ const [h,m]=t.split(':').map(Number); return h*60+m; }
-const SCHED_NET_MIN = netMinutes(hm(SCHED_IN), hm(SCHED_OUT)); // 465 = 7:45
+const SCHED_NET_MIN = netMinutes(hm(SCHED_IN), hm(SCHED_OUT), BREAKS); // 465 = 7:45
 function fmtDiff(diff){
   const sign = diff>0 ? '+' : diff<0 ? '-' : '';
   return sign + fmtMin(Math.abs(diff));
@@ -202,22 +239,44 @@ function refreshPunchUI(){
   document.getElementById('todayLabel').textContent =
     `${today.getFullYear()}年${today.getMonth()+1}月${today.getDate()}日（${'日月火水木金土'[today.getDay()]}）`;
 
-  const rec = records[key];
+  const rec = records[key] || {};
   const btn = document.getElementById('punchBtn');
+  const schedBtn = document.getElementById('schedBtn');
   const status = document.getElementById('statusLine');
+  const typeWrap = document.getElementById('dayTypeWrap');
+  const holiday = isHoliday(key);
 
-  if(!rec || !rec.in){
-    btn.textContent = '出勤';
-    btn.className = 'punchBtn in';
-    status.innerHTML = '未出勤';
-  } else if(rec.in && !rec.out){
+  if(!rec.in){
+    if(holiday){
+      // 土日：種別選択ボタンを表示、通常ボタンを隠す
+      btn.style.display = 'none';
+      schedBtn.style.display = 'none';
+      typeWrap.classList.add('show');
+      status.innerHTML = '休日出勤の種別を選択';
+    } else {
+      btn.style.display = '';
+      schedBtn.style.display = '';
+      typeWrap.classList.remove('show');
+      btn.textContent = '出勤';
+      btn.className = 'punchBtn in';
+      status.innerHTML = '未出勤';
+    }
+  } else if(!rec.out){
+    btn.style.display = '';
+    schedBtn.style.display = 'none';
+    typeWrap.classList.remove('show');
     btn.textContent = '退勤';
     btn.className = 'punchBtn out';
-    status.innerHTML = `出勤中 <b>${rec.in}〜</b>`;
+    const typeLabel = rec.dayType === 'training' ? '【研修】' : rec.dayType === 'work' ? '【休日作業】' : '';
+    status.innerHTML = `出勤中 ${typeLabel}<b>${rec.in}〜</b>`;
   } else {
+    btn.style.display = '';
+    schedBtn.style.display = 'none';
+    typeWrap.classList.remove('show');
     btn.textContent = '本日完了（タップで退勤時刻修正）';
     btn.className = 'punchBtn done';
-    status.innerHTML = `本日 <b>${rec.in}〜${rec.out}</b> 退勤済`;
+    const typeLabel = rec.dayType === 'training' ? '【研修】' : rec.dayType === 'work' ? '【休日作業】' : '';
+    status.innerHTML = `本日 ${typeLabel}<b>${rec.in}〜${rec.out}</b> 退勤済`;
   }
 }
 
@@ -237,6 +296,20 @@ document.getElementById('punchBtn').addEventListener('click', ()=>{
   refreshPunchUI();
   renderMonth();
 });
+
+function punchWithType(dayType){
+  const today = new Date();
+  const key = dateKey(today);
+  const rec = records[key] || {};
+  rec.in = timeStr(today);
+  rec.dayType = dayType;
+  records[key] = rec;
+  saveRecords(records);
+  refreshPunchUI();
+  renderMonth();
+}
+document.getElementById('trainBtn').addEventListener('click', ()=> punchWithType('training'));
+document.getElementById('workBtn').addEventListener('click',  ()=> punchWithType('work'));
 
 document.getElementById('schedBtn').addEventListener('click', ()=>{
   const today = new Date();
@@ -354,13 +427,21 @@ function renderMonth(){
     function recalcRow(){
       const im = minutesOf(inInput.value);
       const om = minutesOf(outInput.value);
-      const net = netMinutes(im, om);
-      if(net!=null){
-        const diff = net - SCHED_NET_MIN;
-        const cls = diff>0?'pos':diff<0?'neg':'zero';
-        durEl.innerHTML = `<div class="net">${fmtMin(net)}</div><div class="diff ${cls}">${fmtDiff(diff)}</div>`;
+      const bk = getBreaks(key, rec.dayType);
+      const net = netMinutes(im, om, bk);
+      if(isHoliday(key)){
+        const badgeCls = rec.dayType === 'training' ? 'training' : 'work';
+        const badgeTxt = rec.dayType === 'training' ? '研修' : '休日';
+        const netTxt = net!=null ? fmtMin(net) : '-';
+        durEl.innerHTML = `<div class="net">${netTxt}</div><div class="badge ${badgeCls}">${badgeTxt}</div>`;
       } else {
-        durEl.innerHTML = `<div class="net">-</div>`;
+        if(net!=null){
+          const diff = net - SCHED_NET_MIN;
+          const cls = diff>0?'pos':diff<0?'neg':'zero';
+          durEl.innerHTML = `<div class="net">${fmtMin(net)}</div><div class="diff ${cls}">${fmtDiff(diff)}</div>`;
+        } else {
+          durEl.innerHTML = `<div class="net">-</div>`;
+        }
       }
     }
     [inInput,outInput].forEach(inp=>{
@@ -384,10 +465,11 @@ function renderMonth(){
     list.appendChild(row);
 
     const im = minutesOf(rec.in), om = minutesOf(rec.out);
-    const net = netMinutes(im, om);
+    const bk = getBreaks(key, rec.dayType);
+    const net = netMinutes(im, om, bk);
     if(net!=null){
       totalMinutes += net;
-      totalDiff += (net - SCHED_NET_MIN);
+      if(!isHoliday(key)) totalDiff += (net - SCHED_NET_MIN);
     }
   }
 
