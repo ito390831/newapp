@@ -433,7 +433,14 @@ function renderMonth(){
         const badgeCls = rec.dayType === 'training' ? 'training' : 'work';
         const badgeTxt = rec.dayType === 'training' ? '研修' : '休日';
         const netTxt = net!=null ? fmtMin(net) : '-';
-        durEl.innerHTML = `<div class="net">${netTxt}</div><div class="badge ${badgeCls}">${badgeTxt}</div>`;
+        durEl.innerHTML = `<div class="net">${netTxt}</div><div class="badge ${badgeCls}" style="cursor:pointer" title="タップで種別切替">${badgeTxt}</div>`;
+        durEl.querySelector('.badge').addEventListener('click', ()=>{
+          rec.dayType = rec.dayType === 'training' ? 'work' : 'training';
+          records[key] = rec;
+          saveRecords(records);
+          renderMonth();
+          refreshPunchUI();
+        });
       } else {
         if(net!=null){
           const diff = net - SCHED_NET_MIN;
