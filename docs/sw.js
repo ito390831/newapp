@@ -1,4 +1,4 @@
-const CACHE = 'kintai-v1';
+const CACHE = 'kintai-v2';
 const ASSETS = [
   './',
   './index.html',
