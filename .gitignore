@@ -1,0 +1,9 @@
+.env
+*.env
+credentials*.json
+*secret*
+*.apk
+*.keystore
+*.jks
+.DS_Store
+Thumbs.db
